@@ -1,0 +1,9 @@
+# Ignore build and dist directories
+build/
+dist/
+
+# Ignore backup script
+backup.py
+
+# Ignore all .exe files
+*.exe
