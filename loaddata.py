@@ -5,10 +5,10 @@ from PyQt6.QtWidgets import (
     QDialog, QRadioButton, QListWidgetItem, QSizePolicy
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QTimer, QPoint
-from PyQt6.QtGui import QIcon, QColor, QPalette, QFont, QMovie, QCursor, QPainter
+from PyQt6.QtGui import QIcon, QColor, QCursor, QPainter
 import polars as pl
 import os
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 import sys
 
 # Custom color scheme
@@ -663,8 +663,9 @@ class DataProcessingApp(QMainWindow):
                     background-color: {COLORS['secondary_dark']};
                 }}
             """)
-            export_btn.clicked.connect(export_dialog.accept)
+            export_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
             dialog_layout.addWidget(export_btn)
+            export_btn.clicked.connect(export_dialog.accept)
 
             # Execute dialog and get result
             result = export_dialog.exec()
