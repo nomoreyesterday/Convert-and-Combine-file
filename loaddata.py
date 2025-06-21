@@ -265,15 +265,11 @@ class DataProcessingApp(QMainWindow):
         title_frame.setStyleSheet("background-color: transparent;")
         title_layout = QVBoxLayout(title_frame)
         title_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.addWidget(title_frame)
+        header_layout.addWidget(title_frame, alignment=Qt.AlignmentFlag.AlignTop)
 
-        title_label = QLabel("Selected Files")
-        title_label.setStyleSheet(f"color: {COLORS['primary']}; font-size: 18px; font-weight: bold;")
-        title_layout.addWidget(title_label)
-
-        subtitle_label = QLabel("Select and combine your data files")
-        subtitle_label.setStyleSheet("color: gray; font-size: 12px;")
-        title_layout.addWidget(subtitle_label)
+        self.title_label = QLabel("Selected Files (0)")
+        self.title_label.setStyleSheet(f"color: {COLORS['primary']}; font-size: 18px; font-weight: bold;")
+        title_layout.addWidget(self.title_label)
         
         header_layout.addStretch()
 
@@ -307,26 +303,41 @@ class DataProcessingApp(QMainWindow):
             }}
         """
         
-        # Select Template button
+        # Select Template button with label below
+        select_template_container = QFrame()
+        select_template_container.setStyleSheet("background-color: transparent;")
+        select_template_layout = QVBoxLayout(select_template_container)
+        select_template_layout.setContentsMargins(0, 0, 0, 0)
+        select_template_layout.setSpacing(2)
+        
         self.select_template_btn = QPushButton("Select Template")
         self.select_template_btn.clicked.connect(self.select_template)
         self.select_template_btn.setStyleSheet(button_style_header)
         self.select_template_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        buttons_layout.addWidget(self.select_template_btn)
+        select_template_layout.addWidget(self.select_template_btn)
         
-        # Change Header button
-        self.change_header_btn = QPushButton("Change Header")
-        self.change_header_btn.clicked.connect(self.change_header)
-        self.change_header_btn.setStyleSheet(button_style_header)
-        self.change_header_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        buttons_layout.addWidget(self.change_header_btn)
+        self.template_filename_label = QLabel("No template selected")
+        self.template_filename_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.template_filename_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 10px; padding-left: 2px;")
+        self.template_filename_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        select_template_layout.addWidget(self.template_filename_label)
+        
+        # Apply Template button
+        self.apply_template_btn = QPushButton("Apply Template")
+        self.apply_template_btn.clicked.connect(self.apply_template)
+        self.apply_template_btn.setStyleSheet(button_style_header)
+        self.apply_template_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
 
         # Export button
         self.export_btn = QPushButton("Export File")
         self.export_btn.clicked.connect(self.export_file)
         self.export_btn.setStyleSheet(button_style_header)
         self.export_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        buttons_layout.addWidget(self.export_btn)
+        
+        # --- Add Widgets to Layout with Alignment ---
+        buttons_layout.addWidget(select_template_container, alignment=Qt.AlignmentFlag.AlignTop)
+        buttons_layout.addWidget(self.apply_template_btn, alignment=Qt.AlignmentFlag.AlignTop)
+        buttons_layout.addWidget(self.export_btn, alignment=Qt.AlignmentFlag.AlignTop)
 
         # File list section
         file_list_container = QFrame()
@@ -340,7 +351,7 @@ class DataProcessingApp(QMainWindow):
         top_row = QHBoxLayout()
         top_row.setContentsMargins(0, 0, 0, 0)
         top_row.setSpacing(0)
-        self.remove_duplicates_checkbox = QCheckBox("Remove duplicate rows when combining files")
+        self.remove_duplicates_checkbox = QCheckBox("Remove duplicate rows")
         self.remove_duplicates_checkbox.setChecked(True)
         self.remove_duplicates_checkbox.setStyleSheet(f"color: {COLORS['text']}; font-size: 11px;")
         self.remove_duplicates_checkbox.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
@@ -371,9 +382,8 @@ class DataProcessingApp(QMainWindow):
         """)
         self.clear_all_btn.clicked.connect(self.clear_files)
         top_row.addWidget(self.clear_all_btn, alignment=Qt.AlignmentFlag.AlignRight)
-        file_list_layout.insertLayout(0, top_row)
+        file_list_layout.addLayout(top_row)
 
-        # File list (QListWidget)
         self.listbox = QListWidget()
         self.listbox.setStyleSheet(f"""
             QListWidget {{
@@ -381,7 +391,7 @@ class DataProcessingApp(QMainWindow):
                 color: {COLORS['text']};
                 font-size: 11px;
                 border: 1px solid {COLORS['primary']};
-                border-radius: 5px;
+                border-radius: 8px;
                 padding: 5px;
             }}
             QListWidget::item {{
@@ -515,12 +525,12 @@ class DataProcessingApp(QMainWindow):
             if hasattr(self, 'clear_all_btn'):
                 self.clear_all_btn.setEnabled(True)
             if has_template:
-                self.change_header_btn.setEnabled(True)
+                self.apply_template_btn.setEnabled(True)
             else:
-                self.change_header_btn.setEnabled(False)
+                self.apply_template_btn.setEnabled(False)
         else:
             self.select_template_btn.setEnabled(False)
-            self.change_header_btn.setEnabled(False)
+            self.apply_template_btn.setEnabled(False)
             self.export_btn.setEnabled(False)
             if hasattr(self, 'clear_all_btn'):
                 self.clear_all_btn.setEnabled(False)
@@ -554,6 +564,10 @@ class DataProcessingApp(QMainWindow):
             self.update_status("Error selecting files")
 
     def update_listbox(self):
+        # Update the title with the current file count, excluding the combined file
+        file_count = len([f for f in self.selected_files if f != COMBINED_TEMP_KEY])
+        self.title_label.setText(f"Selected Files ({file_count})")
+
         self.listbox.clear()
         for file in self.selected_files:
             if file == COMBINED_TEMP_KEY:
@@ -583,18 +597,22 @@ class DataProcessingApp(QMainWindow):
     def clear_files(self):
         """Clears all selected files."""
         self.selected_files = []
-        if self.listbox:
-            self.listbox.clear()
-            # self.listbox.update()  # Removed to reduce flicker
         self.combined_df = None
-        self.update_status("Cleared all files")
+        
+        # Reset data and UI
+        self.update_listbox()
         self.update_button_states()
+        self.update_status("Cleared all files")
+
         # Clear the data preview table as well
         if hasattr(self, 'data_table') and self.data_table is not None:
             self.data_table.clearContents()
             self.data_table.setRowCount(0)
             self.data_table.setColumnCount(0)
-        # self.update()  # Removed to reduce flicker
+        # Reset template filename label
+        if hasattr(self, 'template_filename_label'):
+            self.template_filename_label.setText("No template selected")
+            self.template_filename_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 10px; padding-left: 2px;")
 
     def export_file(self):
         """Export the processed files with various options."""
@@ -795,29 +813,160 @@ class DataProcessingApp(QMainWindow):
         else:
             raise ValueError(f"Unsupported file type: {ext}")
 
-    def change_header(self):
-        """
-        Change column headers using the previously loaded header mapping template.
-        This function applies the mappings stored in self.header_mapping to rename columns.
-        If filename-specific mappings exist, they will be applied only to matching files.
-        """
-        # Check if a file is selected
-        if not self.selected_files:
-            QMessageBox.warning(
-                self, "Warning",
-                "Please select a file first before changing headers!"
-            )
-            return
-        
-        # Check if a template has been loaded
-        if not self.template_file or (not self.header_mapping and not hasattr(self, 'filename_mapping')):
-            QMessageBox.warning(
-                self, "Warning",
-                "Please select a template file first using the 'Select Template' button!"
-            )
-            return
-            
+    def select_template(self):
+        """Select a template file for header mapping."""
         try:
+            # Get the template file
+            template_file, _ = QFileDialog.getOpenFileName(
+                self, "Select Header Mapping Template", "",
+                "Excel files (*.xlsx *.xls);;All files (*.*)"
+            )
+            
+            if not template_file:
+                self.update_status("Template selection cancelled")
+                return
+                
+            template_file_name = os.path.basename(template_file)
+            self.update_status(f"Reading mapping from: {template_file_name}...")
+            
+            # Read the mapping file using specified engine with fallback
+            mapping_df = None
+            try:
+                mapping_df = pl.read_excel(template_file, engine="openpyxl")
+            except ImportError:
+                 QMessageBox.critical(
+                    self, "Error",
+                    "Exporting or loading template from Excel requires 'openpyxl'.\n"
+                    "Please install it using:\n\n pip install openpyxl"
+                )
+                 self.update_status("Template loading failed: openpyxl missing")
+                 return
+            except Exception as e_openpyxl:
+                QMessageBox.critical(
+                    self, "Error", 
+                    f"Error reading template file with openpyxl: {str(e_openpyxl)}"
+                )
+                self.update_status("Template loading failed")
+                return
+            
+            if mapping_df is None:
+                 QMessageBox.critical(
+                     self, "Error",
+                     f"Failed to read template file '{template_file_name}'.\n"
+                     "Could not read with openpyxl."
+                 )
+                 self.update_status("Template loading failed")
+                 return
+
+            # Check if the mapping file has at least 2 columns
+            if mapping_df.width < 2:
+                QMessageBox.critical(
+                    self, "Error",
+                    f"The template file must have at least 2 columns (found {mapping_df.width})!\\n"
+                    "Column A should contain original header names.\\n"
+                    "Column B should contain new header names."
+                )
+                self.update_status("Template loading failed: invalid format")
+                return
+                
+            # Extract mapping from columns A and B
+            # Get column names (they might not be named 'A' and 'B')
+            # Use schema from the read dataframe
+            col_names = mapping_df.columns
+            if len(col_names) < 2:
+                QMessageBox.critical(
+                    self, "Error", 
+                    "Template file doesn't have enough columns!"
+                )
+                return
+                
+            # Create mapping dictionary from first two columns
+            mapping = {}
+            filename_mapping = {}  # New dictionary to store filename-specific mappings
+            
+            # Store columns to delete from column 4 if it exists
+            self.columns_to_delete = []
+            column_names = mapping_df.columns
+            if mapping_df.width >= 4: # Changed from 3 to 4, expecting 4 columns now
+                # delete_col = mapping_df.get_column(3)  # Get 4th column (0-based index)
+                delete_col = mapping_df[column_names[3]]
+                self.columns_to_delete = [str(col).strip() for col in delete_col if str(col).strip()]
+            
+            for row in mapping_df.rows():
+                original = str(row[0]).strip() if row[0] is not None else ""
+                new_name = str(row[1]).strip() if row[1] is not None else ""
+                filename = str(row[2]).strip() if len(row) > 2 and row[2] is not None else ""
+                
+                if original and new_name:  # Only add if both values exist
+                    if filename:  # If there's a filename specified
+                        if filename not in filename_mapping:
+                            filename_mapping[filename] = {}
+                        filename_mapping[filename][original] = new_name
+                    else:  # If no filename specified, add to general mapping
+                        mapping[original] = new_name
+            
+            if not mapping and not filename_mapping:
+                QMessageBox.critical(
+                    self, "Error",
+                    "No valid header mappings found in the template file!"
+                )
+                self.update_status("Template loading failed: no valid mappings")
+                return
+                
+            # Store template file and mappings
+            self.template_file = template_file
+            self.header_mapping = mapping
+            self.filename_mapping = filename_mapping  # Store filename-specific mappings
+            
+            # Update template filename label
+            self.template_filename_label.setText(template_file_name)
+            self.template_filename_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 10px; padding-left: 2px;")
+            
+            # Show success message with mapping count
+            total_mappings = len(mapping) + sum(len(m) for m in filename_mapping.values())
+            filename_count = len(filename_mapping)
+            
+            success_msg = f"Template file '{template_file_name}' loaded successfully!\n\n"
+            success_msg += f"Found {total_mappings} total header mappings.\n"
+            if filename_count > 0:
+                success_msg += f"Of which {filename_count} are filename-specific mappings."
+            
+            if self.columns_to_delete:
+                success_msg += f"\n\nFound {len(self.columns_to_delete)} columns marked for deletion."
+            
+            QMessageBox.information(self, "Template Loaded", success_msg)
+            
+            self.update_status(f"Template loaded: {total_mappings} mappings")
+            
+            # Update button states
+            self.update_button_states()
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Error", 
+                f"Error loading template file: {str(e)}"
+            )
+            self.update_status("Template loading failed")
+
+    def apply_template(self):
+        """Apply the selected template to all files."""
+        try:
+            # Check if files are selected
+            if not self.selected_files:
+                QMessageBox.warning(
+                    self, "Warning",
+                    "Please select files first before applying template!"
+                )
+                return
+            
+            # Check if a template has been loaded
+            if not self.template_file or (not self.header_mapping and not hasattr(self, 'filename_mapping')):
+                QMessageBox.warning(
+                    self, "Warning",
+                    "Please select a template file first using the 'Select Template' button!"
+                )
+                return
+            
             # Process each file
             processed_files = []
             skipped_files = []
@@ -828,23 +977,24 @@ class DataProcessingApp(QMainWindow):
                 source_file_name = os.path.basename(source_file)
                 
                 # Get the appropriate mapping for this file
-                mapping = self.header_mapping # Start with general mapping
-                if hasattr(self, 'filename_mapping'):
-                    found_specific_mapping = False
+                mapping = self.header_mapping.copy() # Start with general mapping
+                
+                # Check for filename-specific mappings
+                if hasattr(self, 'filename_mapping') and self.filename_mapping:
                     # Check for exact match first
                     if source_file_name in self.filename_mapping:
-                        mapping = self.filename_mapping[source_file_name]
-                        found_specific_mapping = True
+                        mapping.update(self.filename_mapping[source_file_name])
                     else:
                         # Check if any filename in the mapping is a substring of the source file name
                         for template_filename, specific_mapping in self.filename_mapping.items():
-                            if template_filename in source_file_name:
-                                mapping = specific_mapping
-                                found_specific_mapping = True
+                            if template_filename and template_filename in source_file_name:
+                                mapping.update(specific_mapping)
                                 break
+                
                 if not mapping:
                     skipped_files.append(source_file_name)
                     continue
+                
                 try:
                     df = self.process_file(source_file)
                     if df.is_empty():
@@ -860,9 +1010,11 @@ class DataProcessingApp(QMainWindow):
                     )
                     self.update_status(f"Processing failed: {source_file_name}")
                     continue
+                
                 old_columns = df.columns
                 new_columns = []
                 seen_names = {}
+                
                 for old_col in old_columns:
                     new_col = mapping.get(old_col, old_col)
                     if new_col in seen_names:
@@ -871,14 +1023,18 @@ class DataProcessingApp(QMainWindow):
                     else:
                         seen_names[new_col] = 0
                     new_columns.append(new_col)
+                
                 rename_mapping = dict(zip(old_columns, new_columns))
                 renamed_df = df.rename(rename_mapping)
                 self.processed_dfs_with_changed_headers[source_file] = renamed_df
+                
                 changes = sum(1 for old, new in zip(old_columns, new_columns) if old != new)
                 total_changes += changes
                 if changes > 0:
                     processed_files.append((source_file_name, changes))
-            success_msg = ["Headers successfully changed!"]
+                
+            # Show results
+            success_msg = ["Template applied successfully!"]
             if processed_files:
                 success_msg.append("\nProcessed files:")
                 for filename, changes in processed_files:
@@ -888,17 +1044,19 @@ class DataProcessingApp(QMainWindow):
                 for filename in skipped_files:
                     success_msg.append(f"- {filename}")
             success_msg.append(f"\nTotal columns changed: {total_changes}")
+            
             QMessageBox.information(
                 self, "Success",
                 "\n".join(success_msg)
             )
-            self.update_status(f"Changed headers in {len(processed_files)} files")
+            self.update_status(f"Applied template to {len(processed_files)} files")
+            
         except Exception as e:
             QMessageBox.critical(
                 self, "Error",
-                f"Error changing headers: {str(e)}"
+                f"Error applying template: {str(e)}"
             )
-            self.update_status("Header change failed")
+            self.update_status("Template application failed")
 
     def _get_save_path(self) -> Optional[str]:
         """Get the save path from file dialog."""
@@ -941,7 +1099,7 @@ class DataProcessingApp(QMainWindow):
 
         QMessageBox.information(
             self, "Success",
-            f"Combined data saved successfully to {save_path}!"
+            f"Combined data saved successfully to:\n{save_path}"
         )
         self.update_status("Export: Success")
 
@@ -1128,137 +1286,6 @@ class DataProcessingApp(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error combining files: {str(e)}")
             self.update_status(f"Error combining files: {str(e)}")
-
-    def select_template(self):
-        """Select a template file for header mapping."""
-        try:
-            # Get the template file
-            template_file, _ = QFileDialog.getOpenFileName(
-                self, "Select Header Mapping Template", "",
-                "Excel files (*.xlsx *.xls);;All files (*.*)"
-            )
-            
-            if not template_file:
-                self.update_status("Template selection cancelled")
-                return
-                
-            template_file_name = os.path.basename(template_file)
-            self.update_status(f"Reading mapping from: {template_file_name}...")
-            
-            # Read the mapping file using specified engine with fallback
-            mapping_df = None
-            try:
-                mapping_df = pl.read_excel(template_file, engine="openpyxl")
-            except ImportError:
-                 QMessageBox.critical(
-                    self, "Error",
-                    "Exporting or loading template from Excel requires 'openpyxl'.\n"
-                    "Please install it using:\n\n pip install openpyxl"
-                )
-                 self.update_status("Template loading failed: openpyxl missing")
-                 return
-            except Exception as e_openpyxl:
-                QMessageBox.critical(
-                    self, "Error", 
-                    f"Error reading template file with openpyxl: {str(e_openpyxl)}"
-                )
-                self.update_status("Template loading failed")
-                return
-            
-            if mapping_df is None:
-                 QMessageBox.critical(
-                     self, "Error",
-                     f"Failed to read template file '{template_file_name}'.\n"
-                     "Could not read with openpyxl."
-                 )
-                 self.update_status("Template loading failed")
-                 return
-
-            # Check if the mapping file has at least 2 columns
-            if mapping_df.width < 2:
-                QMessageBox.critical(
-                    self, "Error",
-                    f"The template file must have at least 2 columns (found {mapping_df.width})!\\n"
-                    "Column A should contain original header names.\\n"
-                    "Column B should contain new header names."
-                )
-                self.update_status("Template loading failed: invalid format")
-                return
-                
-            # Extract mapping from columns A and B
-            # Get column names (they might not be named 'A' and 'B')
-            # Use schema from the read dataframe
-            col_names = mapping_df.columns
-            if len(col_names) < 2:
-                QMessageBox.critical(
-                    self, "Error", 
-                    "Template file doesn't have enough columns!"
-                )
-                return
-                
-            # Create mapping dictionary from first two columns
-            mapping = {}
-            filename_mapping = {}  # New dictionary to store filename-specific mappings
-            
-            # Store columns to delete from column 4 if it exists
-            self.columns_to_delete = []
-            column_names = mapping_df.columns
-            if mapping_df.width >= 4: # Changed from 3 to 4, expecting 4 columns now
-                # delete_col = mapping_df.get_column(3)  # Get 4th column (0-based index)
-                delete_col = mapping_df[column_names[3]]
-                self.columns_to_delete = [str(col).strip() for col in delete_col if str(col).strip()]
-            
-            for row in mapping_df.rows():
-                original = str(row[0]).strip() if row[0] is not None else ""
-                new_name = str(row[1]).strip() if row[1] is not None else ""
-                filename = str(row[2]).strip() if len(row) > 2 and row[2] is not None else ""
-                
-                if original and new_name:  # Only add if both values exist
-                    if filename:  # If there's a filename specified
-                        if filename not in filename_mapping:
-                            filename_mapping[filename] = {}
-                        filename_mapping[filename][original] = new_name
-                    else:  # If no filename specified, add to general mapping
-                        mapping[original] = new_name
-            
-            if not mapping and not filename_mapping:
-                QMessageBox.critical(
-                    self, "Error",
-                    "No valid header mappings found in the template file!"
-                )
-                self.update_status("Template loading failed: no valid mappings")
-                return
-                
-            # Store template file and mappings
-            self.template_file = template_file
-            self.header_mapping = mapping
-            self.filename_mapping = filename_mapping  # Store filename-specific mappings
-            
-            # Show success message with mapping count
-            total_mappings = len(mapping) + sum(len(m) for m in filename_mapping.values())
-            filename_count = len(filename_mapping)
-            
-            success_msg = f"Template file '{template_file_name}' loaded successfully!\n\n"
-            success_msg += f"Found {total_mappings} total header mappings.\n"
-            if filename_count > 0:
-                success_msg += f"Of which {filename_count} are filename-specific mappings."
-            
-            if self.columns_to_delete:
-                success_msg += f"\n\nFound {len(self.columns_to_delete)} columns marked for deletion."
-            
-            QMessageBox.information(self, "Template Loaded", success_msg)
-            
-            self.update_status(f"Template loaded: {total_mappings} mappings")
-            
-            # Update button states
-            self.update_button_states()
-            
-        except Exception as e:
-            QMessageBox.critical(
-                self, "Error", 
-                f"Error loading template file: {str(e)}"
-            )
-            self.update_status("Template loading failed")
 
     def delete_columns(self):
         """Delete columns based on the list from template file."""
