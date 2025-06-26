@@ -10,6 +10,12 @@ import polars as pl
 import os
 from typing import List, Dict, Any, Optional
 import sys
+from collections import Counter
+import csv
+
+# คำสั่ง run exe
+# pyinstaller -F loaddata.py -w --add-data "icon.ico;." -i "icon.ico" -n "Data Processing"
+
 
 # Custom color scheme
 COLORS = {
@@ -1151,9 +1157,8 @@ class DataProcessingApp(QMainWindow):
             elif ext in ['.csv', '.xlsx', '.xls']:
                 # Find header row
                 header_row = find_header_start_row(file_path, ext)
-                
                 if ext == '.csv':
-                    df = self._process_csv_file(file_path, header_row)
+                    df = process_csv_with_explicit_header(file_path, header_row)
                 else:
                     try:
                         # For Excel files, use fastexcel
@@ -1171,7 +1176,6 @@ class DataProcessingApp(QMainWindow):
                         except Exception:
                             # Last resort: just read the file without options
                             df = pl.read_excel(file_path)
-                
                 # Remove double quotes from string columns
                 string_columns = [col for col in df.columns if df.schema[col] == pl.String]
                 if string_columns:
@@ -1472,90 +1476,38 @@ class DataProcessingApp(QMainWindow):
         pass
 
 def find_header_start_row(file_path: str, ext: str, num_rows_to_check: int = 100) -> int:
-    """
-    Find the header row by:
-    1. Reading first 100 rows or entire file
-    2. Remove rows where first column is empty
-    3. Find first row with maximum number of columns
-    """
     try:
-        # Read sample data
+        rows = []
         if ext == '.csv':
-            # Read entire file content
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                all_lines = f.readlines()
-            
-            # Process rows
-            valid_rows = []  # Will store tuples of (row_index, number_of_columns)
-            
-            # Process only first num_rows_to_check if file is larger
-            lines_to_check = all_lines[:num_rows_to_check]
-            
-            for i, line in enumerate(lines_to_check):
-                line = line.strip()
-                if not line:  # Skip empty lines
-                    continue
-                
-                # Split and clean columns
-                columns = [col.strip() for col in line.split(',')]
-                
-                # Skip if first column is empty
-                if not columns[0]:
-                    continue
-                
-                # Count non-empty columns
-                non_empty_count = len([col for col in columns if col])
-                if non_empty_count > 0:
-                    valid_rows.append((i, non_empty_count))
-            
-            if not valid_rows:
-                return 0
-            
-            # Find the row with maximum columns
-            max_cols = max(count for _, count in valid_rows)
-            
-            # Return the first row that has the maximum number of columns
-            for row_idx, count in valid_rows:
-                if count == max_cols:
-                    return row_idx
-            
-            return 0
-
+                reader = csv.reader(f)
+                for i, row in enumerate(reader):
+                    if i >= num_rows_to_check:
+                        break
+                    rows.append([c for c in row])
         elif ext in ['.xlsx', '.xls']:
-            # Read entire file
             df = pl.read_excel(file_path)
-            
-            # Process only first num_rows_to_check
-            rows_to_check = min(num_rows_to_check, df.height)
-            valid_rows = []
-            
-            for i in range(rows_to_check):
-                row = df.row(i)
-                
-                # Skip if first column is empty
-                if row[0] is None or str(row[0]).strip() == "":
-                    continue
-                
-                # Count non-empty cells
-                non_empty_count = sum(1 for val in row if val is not None and str(val).strip() != "")
-                if non_empty_count > 0:
-                    valid_rows.append((i, non_empty_count))
-            
-            if not valid_rows:
-                return 0
-            
-            # Find row with maximum columns
-            max_cols = max(count for _, count in valid_rows)
-            
-            # Return first row with maximum columns
-            for row_idx, count in valid_rows:
-                if count == max_cols:
-                    return row_idx
-            
+            for i in range(min(num_rows_to_check, df.height)):
+                rows.append([str(val) if val is not None else '' for val in df.row(i)])
+        else:
             return 0
-
+        # ข้าม row ที่ว่างหรือ column count < 2
+        valid_rows = [row for row in rows if len([c for c in row if str(c).strip()]) >= 2]
+        if not valid_rows:
+            return 0
+        col_counts = [len(row) for row in valid_rows]
+        mode_col = Counter(col_counts).most_common(1)[0][0]
+        for idx, row in enumerate(rows):
+            if len(row) == mode_col:
+                unique_ratio = len(set(row)) / mode_col if mode_col else 0
+                if unique_ratio > 0.8:
+                    return idx
+        # fallback: แถวแรกที่มี column count = mode
+        for idx, row in enumerate(rows):
+            if len(row) == mode_col:
+                return idx
+        return 0
     except Exception as e:
-        # Consolidated error handling for any issues during header detection
         return 0
 
 def align_dataframe_to_schema(df: pl.DataFrame, standard_schema: Any) -> pl.DataFrame:
@@ -1614,6 +1566,33 @@ def align_dataframe_to_schema(df: pl.DataFrame, standard_schema: Any) -> pl.Data
             schema_names_str = "Error retrieving schema info"
 
         raise ValueError(f"Error aligning DataFrame to schema (Standard Schema: {schema_names_str}): {e}")
+
+def process_csv_with_explicit_header(file_path, header_row):
+    import csv
+    import polars as pl
+    # อ่านไฟล์รอบเดียว เก็บทุก row ใน list
+    with open(file_path, 'r', encoding='utf-8-sig', errors='ignore') as f:
+        all_rows = list(csv.reader(f))
+    header = all_rows[header_row]
+    # Filter duplicate columns (keep first occurrence)
+    seen = set()
+    unique_indices = []
+    unique_header = []
+    for idx, col in enumerate(header):
+        if col not in seen:
+            seen.add(col)
+            unique_indices.append(idx)
+            unique_header.append(col)
+    # Filter data rows to keep only unique columns
+    filtered_rows = [
+        [row[i] for i in unique_indices]
+        for row in all_rows[header_row+1:]
+        if len(row) >= len(header)
+    ]
+    # Transpose rows to columns for polars
+    columns_dict = {col: [row[i] for row in filtered_rows] for i, col in enumerate(unique_header)}
+    df = pl.DataFrame(columns_dict)
+    return df
 
 def main():
     app = QApplication(sys.argv)
